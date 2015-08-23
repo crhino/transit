@@ -7,6 +7,9 @@ pub struct Transit<T> {
     packet_type: PhantomData<T>,
 }
 
+/// The From trait in the standard library does not allow for errors to occur. This is useful
+/// particularly when converting a type from a byte array received from the network that may or may
+/// not be of the particular type.
 pub trait FromTransit<T> {
     fn from(T) -> io::Result<Self>;
 }
@@ -20,6 +23,9 @@ impl<T: for<'a> FromTransit<&'a [u8]> + Into<Vec<u8>>> Transit<T> {
         })
     }
 
+    /// On success, this function returns the type deserialized using the FromTransit trait
+    /// implementation. The trait implementation should be able to detect whether or not the buffer
+    /// contains a valid UDP message and emit an error appropriately.
     pub fn recv_from(&self) -> io::Result<(T, SocketAddr)> {
         let mut buf = [0; 1024];
         let (n, addr) = try!(self.socket.recv_from(&mut buf));
@@ -28,6 +34,7 @@ impl<T: for<'a> FromTransit<&'a [u8]> + Into<Vec<u8>>> Transit<T> {
         Ok((data, addr))
     }
 
+    /// Transforms the packet into a byte array and sends it to the associated address.
     pub fn send_to<A>(&self, pkt: T, addr: A) -> io::Result<()> where A: ToSocketAddrs {
         let buf = pkt.into();
         try!(self.socket.send_to(buf.as_slice(), addr));
