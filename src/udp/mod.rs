@@ -11,10 +11,18 @@ pub struct Transit<T> {
 /// particularly when converting a type from a byte array received from the network that may or may
 /// not be of the particular type.
 pub trait FromTransit<T> {
-    fn from(T) -> io::Result<Self>;
+    fn from_transit(T) -> io::Result<Self>;
 }
 
-impl<T: for<'a> FromTransit<&'a [u8]> + Into<Vec<u8>>> Transit<T> {
+/// Like the FromTransit trait, the IntoTransit trait modifies the idea of the into trait.
+/// Specifically, the IntoTransit trait takes a reference to self and specifies a lifetime. This
+/// allows an implementor to keep using the object while tying the lifetime of the return type T to
+/// the implementor's lifetime.
+pub trait IntoTransit<'a, T> {
+    fn into_transit(&'a self) -> T;
+}
+
+impl<T: for<'a> FromTransit<&'a [u8]> + for<'a> IntoTransit<'a, &'a [u8]>> Transit<T> {
     pub fn new<A>(addr: A) -> io::Result<Transit<T>> where A: ToSocketAddrs {
         let socket = try!(UdpSocket::bind(addr));
         Ok(Transit {
@@ -30,14 +38,14 @@ impl<T: for<'a> FromTransit<&'a [u8]> + Into<Vec<u8>>> Transit<T> {
         let mut buf = [0; 1024];
         let (n, addr) = try!(self.socket.recv_from(&mut buf));
         assert!(n <= 1024);
-        let data = try!(T::from(&buf));
+        let data = try!(T::from_transit(&buf));
         Ok((data, addr))
     }
 
     /// Transforms the packet into a byte array and sends it to the associated address.
     pub fn send_to<A>(&self, pkt: T, addr: A) -> io::Result<()> where A: ToSocketAddrs {
-        let buf = pkt.into();
-        try!(self.socket.send_to(buf.as_slice(), addr));
+        let buf = pkt.into_transit();
+        try!(self.socket.send_to(buf, addr));
         Ok(())
     }
 
@@ -49,6 +57,7 @@ impl<T: for<'a> FromTransit<&'a [u8]> + Into<Vec<u8>>> Transit<T> {
 #[cfg(test)]
 mod test {
     use udp::*;
+    use std::slice;
     use std::io::{self, Error, ErrorKind};
 
     #[derive(Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Debug)]
@@ -56,16 +65,14 @@ mod test {
         ten: u8,
     }
 
-    impl Into<Vec<u8>> for Test {
-        fn into(self) -> Vec<u8> {
-            let mut vec  = Vec::new();
-            vec.push(self.ten);
-            vec
+    impl<'a> IntoTransit<'a, &'a [u8]> for Test {
+        fn into_transit(&'a self) -> &'a [u8] {
+            unsafe { slice::from_raw_parts(&self.ten as *const u8, 1) }
         }
     }
 
     impl<'a> FromTransit<&'a [u8]> for Test {
-        fn from(buf: &'a [u8]) -> io::Result<Test> {
+        fn from_transit(buf: &'a [u8]) -> io::Result<Test> {
             if buf[0] != 10 {
                 Err(Error::new(ErrorKind::InvalidData, "failed to serialize"))
             } else {
@@ -79,16 +86,15 @@ mod test {
         data: u8,
     }
 
-    impl Into<Vec<u8>> for Another {
-        fn into(self) -> Vec<u8> {
-            let mut vec  = Vec::new();
-            vec.push(self.data);
-            vec
+    impl<'a> IntoTransit<'a, &'a [u8]> for Another {
+        fn into_transit(&'a self) -> &'a [u8] {
+            unsafe { slice::from_raw_parts(&self.data as *const u8, 1) }
         }
     }
 
+
     impl<'a> FromTransit<&'a [u8]> for Another {
-        fn from(buf: &'a [u8]) -> io::Result<Another> {
+        fn from_transit(buf: &'a [u8]) -> io::Result<Another> {
             Ok(Another { data: buf[0] })
         }
     }
