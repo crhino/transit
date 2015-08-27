@@ -52,6 +52,26 @@ impl<'a> IntoTransit for &'a [u8] {
     }
 }
 
+/// Sends and receives types over UDP, removing any knowledge of buffers and dealing with the std
+/// library.
+///
+/// # Examples
+///
+/// ```rust
+/// use std::io;
+/// use transit::udp::*;
+///
+/// let transit = Transit::new("localhost:65000").unwrap();
+/// let transit2 = Transit::new("localhost:65001").unwrap();
+/// let test = String::from("hello, rust");
+///
+/// let res = transit.send_to(&test, "localhost:65001");
+/// assert!(res.is_ok());
+/// let res: io::Result<(String, _)> = transit2.recv_from();
+/// assert!(res.is_ok());
+/// let (data, _addr) = res.unwrap();
+/// assert_eq!(data, "hello, rust");
+/// ```
 impl<T> Transit<T> {
     pub fn new<A>(addr: A) -> io::Result<Transit<T>> where A: ToSocketAddrs {
         let socket = try!(UdpSocket::bind(addr));
