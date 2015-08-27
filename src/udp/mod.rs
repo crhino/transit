@@ -9,6 +9,11 @@ pub struct Transit<T> {
 }
 
 /// Trait implemented by types that can be read from the network.
+///
+/// # Warnings
+///
+/// A type should always make sure to check whether the passed in buffer is a legitimate packet
+/// sent from a known application. This will be called on any UDP packet received on the socket.
 pub trait FromTransit {
     fn from_transit(&[u8]) -> io::Result<Self> where Self: Sized;
 }
