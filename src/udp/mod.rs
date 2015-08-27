@@ -8,15 +8,13 @@ pub struct Transit<T> {
     packet_type: PhantomData<T>,
 }
 
-/// The From trait in the standard library does not allow for errors to occur. This is useful
-/// particularly when converting a type from a byte array received from the network that may or may
-/// not be of the particular type.
-pub trait FromTransit<T> {
-    fn from_transit(T) -> io::Result<Self> where Self: Sized;
+/// Trait implemented by types that can be read from the network.
+pub trait FromTransit {
+    fn from_transit(&[u8]) -> io::Result<Self> where Self: Sized;
 }
 
-impl<'a> FromTransit<&'a [u8]> for String {
-    fn from_transit(buf: &'a [u8]) -> io::Result<String> {
+impl FromTransit for String {
+    fn from_transit(buf: &[u8]) -> io::Result<String> {
         let vec = Vec::from(buf);
         let res = String::from_utf8(vec);
         match res {
@@ -26,21 +24,30 @@ impl<'a> FromTransit<&'a [u8]> for String {
     }
 }
 
-/// Like the FromTransit trait, the IntoTransit trait modifies the idea of the into trait.
-/// Specifically, the IntoTransit trait takes a reference to self and specifies a lifetime. This
-/// allows an implementor to keep using the object while tying the lifetime of the return type T to
-/// the implementor's lifetime.
-pub trait IntoTransit<'a, T> {
-    fn into_transit(&'a self) -> T;
+impl FromTransit for Vec<u8> {
+    fn from_transit(buf: &[u8]) -> io::Result<Vec<u8>> {
+        Ok(buf.iter().map(|x| *x).collect())
+    }
 }
 
-impl<'a> IntoTransit<'a, &'a [u8]> for String {
-    fn into_transit(&'a self) -> &'a [u8] {
+/// Trait implemented by types that can be written to the network.
+pub trait IntoTransit {
+    fn into_transit(&self) -> &[u8];
+}
+
+impl IntoTransit for String {
+    fn into_transit(&self) -> &[u8] {
         self.as_bytes()
     }
 }
 
-impl<T: for<'a> FromTransit<&'a [u8]> + for<'a> IntoTransit<'a, &'a [u8]>> Transit<T> {
+impl<'a> IntoTransit for &'a [u8] {
+    fn into_transit(&self) -> &[u8] {
+        *self
+    }
+}
+
+impl<T> Transit<T> {
     pub fn new<A>(addr: A) -> io::Result<Transit<T>> where A: ToSocketAddrs {
         let socket = try!(UdpSocket::bind(addr));
         Ok(Transit {
@@ -52,7 +59,7 @@ impl<T: for<'a> FromTransit<&'a [u8]> + for<'a> IntoTransit<'a, &'a [u8]>> Trans
     /// On success, this function returns the type deserialized using the FromTransit trait
     /// implementation. The trait implementation should be able to detect whether or not the buffer
     /// contains a valid UDP message and emit an error appropriately.
-    pub fn recv_from(&self) -> io::Result<(T, SocketAddr)> {
+    pub fn recv_from(&self) -> io::Result<(T, SocketAddr)> where T: FromTransit {
         let mut buf = [0; 1024];
         let (n, addr) = try!(self.socket.recv_from(&mut buf));
         assert!(n < 1024);
@@ -61,7 +68,7 @@ impl<T: for<'a> FromTransit<&'a [u8]> + for<'a> IntoTransit<'a, &'a [u8]>> Trans
     }
 
     /// Transforms the packet into a byte array and sends it to the associated address.
-    pub fn send_to<A>(&self, pkt: T, addr: A) -> io::Result<()> where A: ToSocketAddrs {
+    pub fn send_to<A>(&self, pkt: &T, addr: A) -> io::Result<()> where T: IntoTransit, A: ToSocketAddrs {
         let buf = pkt.into_transit();
         try!(self.socket.send_to(buf, addr));
         Ok(())
@@ -83,14 +90,14 @@ mod test {
         ten: u8,
     }
 
-    impl<'a> IntoTransit<'a, &'a [u8]> for Test {
-        fn into_transit(&'a self) -> &'a [u8] {
+    impl IntoTransit for Test {
+        fn into_transit(&self) -> &[u8] {
             unsafe { slice::from_raw_parts(&self.ten as *const u8, 1) }
         }
     }
 
-    impl<'a> FromTransit<&'a [u8]> for Test {
-        fn from_transit(buf: &'a [u8]) -> io::Result<Test> {
+    impl FromTransit for Test {
+        fn from_transit(buf: &[u8]) -> io::Result<Test> {
             if buf[0] != 10 {
                 Err(Error::new(ErrorKind::InvalidData, "failed to serialize"))
             } else {
@@ -104,15 +111,14 @@ mod test {
         data: u8,
     }
 
-    impl<'a> IntoTransit<'a, &'a [u8]> for Another {
-        fn into_transit(&'a self) -> &'a [u8] {
+    impl IntoTransit for Another {
+        fn into_transit(&self) -> &[u8] {
             unsafe { slice::from_raw_parts(&self.data as *const u8, 1) }
         }
     }
 
-
-    impl<'a> FromTransit<&'a [u8]> for Another {
-        fn from_transit(buf: &'a [u8]) -> io::Result<Another> {
+    impl FromTransit for Another {
+        fn from_transit(buf: &[u8]) -> io::Result<Another> {
             Ok(Another { data: buf[0] })
         }
     }
@@ -125,7 +131,7 @@ mod test {
         let transit2 = Transit::new(addr2).unwrap();
         let test = Test { ten: 10 };
 
-        let res = transit2.send_to(test, addr1);
+        let res = transit2.send_to(&test, addr1);
         assert!(res.is_ok());
         let res = transit1.recv_from();
         assert!(res.is_ok());
@@ -141,12 +147,29 @@ mod test {
         let transit2 = Transit::new(addr2).unwrap();
         let test = String::from("hello");
 
-        let res = transit2.send_to(test.clone(), addr1);
+        let res = transit2.send_to(&test, addr1);
         assert!(res.is_ok());
         let res = transit1.recv_from();
         assert!(res.is_ok());
         let (data, _addr) = res.unwrap();
         assert_eq!(data, test);
+    }
+
+    #[test]
+    fn test_send_recv_bytes() {
+        let addr1 = "127.0.0.1:64001";
+        let addr2 = "127.0.0.1:64002";
+        let transit1 = Transit::new(addr1).unwrap();
+        let transit2 = Transit::new(addr2).unwrap();
+        let vec = vec!(9u8);
+        let slice = &vec[..];
+
+        let res = transit2.send_to(&slice, addr1);
+        assert!(res.is_ok());
+        let res: io::Result<(Vec<u8>, _)> = transit1.recv_from();
+        assert!(res.is_ok());
+        let (data, _addr) = res.unwrap();
+        assert_eq!(data, vec);
     }
 
     #[test]
@@ -157,7 +180,7 @@ mod test {
         let transit2: Transit<Test> = Transit::new(addr2).unwrap();
         let test = Another { data: 27 };
 
-        let res = transit1.send_to(test, addr2);
+        let res = transit1.send_to(&test, addr2);
         assert!(res.is_ok());
         let res = transit2.recv_from();
         assert!(res.is_err());
