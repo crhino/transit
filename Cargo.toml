@@ -2,3 +2,9 @@
 name = "transit"
 version = "0.1.0"
 authors = ["crhino <piraino.chris@gmail.com>"]
+
+description = "Send and receive types over UDP packets."
+readme = "./README.md"
+repository = "https://github.com/crhino/transit"
+keywords = ["udp", "network"]
+license = "BSD-3-Clause"
