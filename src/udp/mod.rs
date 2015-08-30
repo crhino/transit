@@ -72,8 +72,8 @@ impl fmt::Display for TransitError {
 /// Sends and receives types over UDP, removing any knowledge of buffers and dealing with the std
 /// library.
 ///
-/// This use the `bincode` crate to serialize objects. In the future I would like to enable a
-/// secure method of sending UDP packets over the network, but am not currently.
+/// This use the `bincode` crate to serialize objects. Does not currently support securely sending
+/// packets over the network or ensuring that only packets of the correct type are serialized.
 ///
 /// # Examples
 ///
