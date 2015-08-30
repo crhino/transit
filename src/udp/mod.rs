@@ -13,19 +13,20 @@ pub struct Transit<T> {
     packet_type: PhantomData<T>,
 }
 
+pub type UnderlyingError = Box<Error + Send + Sync>;
 #[derive(Debug)]
 pub enum TransitError {
     IoError(io::Error),
-    SerializeError(SerializeError),
-    DeserializeError(DeserializeError),
+    SerializeError(UnderlyingError),
+    DeserializeError(UnderlyingError),
 }
 
 impl Error for TransitError {
     fn description(&self) -> &str {
         match *self {
-            TransitError::IoError(ref err) => Error::description(err),
-            TransitError::SerializeError(ref err) => Error::description(err),
-            TransitError::DeserializeError(ref err) => Error::description(err),
+            TransitError::IoError(ref err) => err.description(),
+            TransitError::SerializeError(ref err) => err.description(),
+            TransitError::DeserializeError(ref err) => err.description(),
         }
     }
 
@@ -46,13 +47,13 @@ impl From<io::Error> for TransitError {
 
 impl From<DeserializeError> for TransitError {
     fn from(err: DeserializeError) -> TransitError {
-        TransitError::DeserializeError(err)
+        TransitError::DeserializeError(Box::new(err))
     }
 }
 
 impl From<SerializeError> for TransitError {
     fn from(err: SerializeError) -> TransitError {
-        TransitError::SerializeError(err)
+        TransitError::SerializeError(Box::new(err))
     }
 }
 
