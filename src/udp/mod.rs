@@ -8,6 +8,7 @@ use bincode::serde::{DeserializeError, SerializeError, serialize, deserialize};
 use bincode;
 use serde::{Serialize, Deserialize};
 
+const MAX_UDP_SIZE: u16 = 65535;
 pub struct Transit<T> {
     socket: UdpSocket,
     packet_type: PhantomData<T>,
@@ -106,7 +107,7 @@ impl<T> Transit<T> {
     /// implementation. It is not defined what happens when Transit trys to deserialize a different
     /// type into another currently.
     pub fn recv_from(&self) -> Result<(T, SocketAddr), TransitError> where T: Deserialize {
-        let mut buf = [0; 65535]; // Max size of UDP packet
+        let mut buf = [0; MAX_UDP_SIZE as usize];
         let (n, addr) = try!(self.socket.recv_from(&mut buf));
         let data = try!(deserialize(&buf[..n]));
         Ok((data, addr))
@@ -114,7 +115,7 @@ impl<T> Transit<T> {
 
     /// Transforms the packet into a byte array and sends it to the associated address.
     pub fn send_to<A>(&self, pkt: &T, addr: A) -> Result<(), TransitError> where T: Serialize, A: ToSocketAddrs {
-        let sizelimit = bincode::SizeLimit::Bounded(65535);
+        let sizelimit = bincode::SizeLimit::Bounded(MAX_UDP_SIZE as u64);
         let vec = try!(serialize(pkt, sizelimit));
         try!(self.socket.send_to(&vec[..], addr));
         Ok(())
