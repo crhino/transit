@@ -93,7 +93,7 @@ impl fmt::Display for TransitError {
 /// assert_eq!(data, "hello, rust");
 /// ```
 impl<T> Transit<T> {
-    pub fn new<A>(addr: A) -> io::Result<Transit<T>> where A: ToSocketAddrs {
+    pub fn new<A>(addr: A) -> Result<Transit<T>, TransitError> where A: ToSocketAddrs {
         let socket = try!(UdpSocket::bind(addr));
         Ok(Transit {
             socket: socket,
@@ -119,8 +119,9 @@ impl<T> Transit<T> {
         Ok(())
     }
 
-    pub fn local_addr(&self)  -> io::Result<SocketAddr> {
-        self.socket.local_addr()
+    pub fn local_addr(&self)  -> Result<SocketAddr, TransitError> {
+        let addr = try!(self.socket.local_addr());
+        Ok(addr)
     }
 }
 
