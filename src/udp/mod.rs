@@ -12,6 +12,7 @@ const MAX_UDP_SIZE: u16 = 65535;
 pub struct Transit<T> {
     socket: UdpSocket,
     packet_type: PhantomData<T>,
+    buffer: Box<[u8]>,
 }
 
 pub type UnderlyingError = Box<Error + Send + Sync>;
@@ -84,7 +85,7 @@ impl fmt::Display for TransitError {
 /// use transit::udp::*;
 ///
 /// let transit = Transit::new("localhost:65000").unwrap();
-/// let transit2 = Transit::new("localhost:65001").unwrap();
+/// let mut transit2 = Transit::new("localhost:65001").unwrap();
 /// let test = String::from("hello, rust");
 ///
 /// let res = transit.send_to(&test, "localhost:65001");
@@ -100,16 +101,19 @@ impl<T> Transit<T> {
         Ok(Transit {
             socket: socket,
             packet_type: PhantomData,
+            buffer: (0..MAX_UDP_SIZE as usize)
+            .map(|_x| 0u8)
+            .collect::<Vec<u8>>()
+            .into_boxed_slice(),
         })
     }
 
     /// On success, this function returns the type deserialized using the Deserialize trait
     /// implementation. It is not defined what happens when Transit trys to deserialize a different
     /// type into another currently.
-    pub fn recv_from(&self) -> Result<(T, SocketAddr), TransitError> where T: Deserialize {
-        let mut buf = [0; MAX_UDP_SIZE as usize];
-        let (n, addr) = try!(self.socket.recv_from(&mut buf));
-        let data = try!(deserialize(&buf[..n]));
+    pub fn recv_from(&mut self) -> Result<(T, SocketAddr), TransitError> where T: Deserialize {
+        let (n, addr) = try!(self.socket.recv_from(&mut self.buffer));
+        let data = try!(deserialize(&self.buffer[..n]));
         Ok((data, addr))
     }
 
@@ -145,7 +149,7 @@ mod test {
     fn test_send_recv() {
         let addr1 = "127.0.0.1:61001";
         let addr2 = "127.0.0.1:61002";
-        let transit1: Transit<Test> = Transit::new(addr1).unwrap();
+        let mut transit1: Transit<Test> = Transit::new(addr1).unwrap();
         let transit2 = Transit::new(addr2).unwrap();
         let test = Test { ten: 10 };
 
@@ -161,7 +165,7 @@ mod test {
     fn test_send_recv_string() {
         let addr1 = "127.0.0.1:63001";
         let addr2 = "127.0.0.1:63002";
-        let transit1: Transit<String> = Transit::new(addr1).unwrap();
+        let mut transit1: Transit<String> = Transit::new(addr1).unwrap();
         let transit2 = Transit::new(addr2).unwrap();
         let test = String::from("hello");
 
@@ -177,7 +181,7 @@ mod test {
     fn test_send_recv_bytes() {
         let addr1 = "127.0.0.1:64001";
         let addr2 = "127.0.0.1:64002";
-        let transit1 = Transit::new(addr1).unwrap();
+        let mut transit1 = Transit::new(addr1).unwrap();
         let transit2 = Transit::new(addr2).unwrap();
         let vec = vec!(9u8);
         let slice = &vec[..];
