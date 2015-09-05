@@ -10,7 +10,8 @@ keywords = ["udp", "network"]
 license = "BSD-3-Clause"
 
 [dependencies]
-bincode = "*"
+rmp = "*"
+rmp-serde = "*"
 serde = "*"
 
 serde_macros = "*"

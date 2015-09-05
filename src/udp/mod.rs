@@ -1,12 +1,13 @@
 use std::marker::PhantomData;
-use std::io::{self};
+use std::io::{self, Write, Read};
 use std::error::Error;
 use std::net::{UdpSocket, SocketAddr, ToSocketAddrs};
 use std::fmt;
 
-use bincode::serde::{DeserializeError, SerializeError, serialize, deserialize};
-use bincode;
 use serde::{Serialize, Deserialize};
+use msgpack::{Serializer, Deserializer};
+use msgpack::decode::Error as DeserializeError;
+use msgpack::encode::Error as SerializeError;
 
 const MAX_UDP_SIZE: u16 = 65535;
 pub struct Transit<T> {
@@ -101,10 +102,7 @@ impl<T> Transit<T> {
         Ok(Transit {
             socket: socket,
             packet_type: PhantomData,
-            buffer: (0..MAX_UDP_SIZE as usize)
-            .map(|_x| 0u8)
-            .collect::<Vec<u8>>()
-            .into_boxed_slice(),
+            buffer: udp_buffer(),
         })
     }
 
@@ -119,8 +117,8 @@ impl<T> Transit<T> {
 
     /// Transforms the packet into a byte array and sends it to the associated address.
     pub fn send_to<A>(&self, pkt: &T, addr: A) -> Result<(), TransitError> where T: Serialize, A: ToSocketAddrs {
-        let sizelimit = bincode::SizeLimit::Bounded(MAX_UDP_SIZE as u64);
-        let vec = try!(serialize(pkt, sizelimit));
+        let mut vec = Vec::new();
+        try!(serialize(&mut vec, pkt));
         try!(self.socket.send_to(&vec[..], addr));
         Ok(())
     }
@@ -129,6 +127,23 @@ impl<T> Transit<T> {
         let addr = try!(self.socket.local_addr());
         Ok(addr)
     }
+}
+
+fn udp_buffer() -> Box<[u8]> {
+    (0..MAX_UDP_SIZE as usize)
+        .map(|_x| 0u8)
+        .collect::<Vec<u8>>()
+        .into_boxed_slice()
+}
+
+fn serialize<W, T>(mut buf: W, val: &T) -> Result<(), TransitError> where W: Write, T: Serialize {
+    try!(val.serialize(&mut Serializer::new(&mut buf)));
+    Ok(())
+}
+
+fn deserialize<R, T>(buf: R) -> Result<T, TransitError> where R: Read, T: Deserialize {
+    let data = try!(Deserialize::deserialize(&mut Deserializer::new(buf)));
+    Ok(data)
 }
 
 #[cfg(test)]
