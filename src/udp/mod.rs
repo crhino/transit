@@ -203,6 +203,13 @@ mod test {
 
         let res = transit2.send_to(&slice, addr1);
         assert!(res.is_ok());
+        let res = transit2.send_to(&slice, addr1);
+        assert!(res.is_ok());
+
+        let res: Result<(Vec<u8>, _), TransitError> = transit1.recv_from();
+        assert!(res.is_ok());
+        let (data, _addr) = res.unwrap();
+        assert_eq!(data, vec);
         let res: Result<(Vec<u8>, _), TransitError> = transit1.recv_from();
         assert!(res.is_ok());
         let (data, _addr) = res.unwrap();
