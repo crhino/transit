@@ -83,7 +83,7 @@ impl fmt::Display for TransitError {
 /// use std::io;
 /// use transit::udp::*;
 ///
-/// let transit = Transit::new("localhost:65000").unwrap();
+/// let mut transit = Transit::new("localhost:65000").unwrap();
 /// let mut transit2 = Transit::new("localhost:65001").unwrap();
 /// let test = String::from("hello, rust");
 ///
@@ -113,10 +113,14 @@ impl Transit {
     }
 
     /// Transforms the packet into a byte array and sends it to the associated address.
-    pub fn send_to<T, A>(&self, pkt: &T, addr: A) -> Result<(), TransitError> where T: Serialize, A: ToSocketAddrs {
-        let mut vec = Vec::new();
-        try!(serialize(&mut vec, pkt));
-        try!(self.socket.send_to(&vec[..], addr));
+    pub fn send_to<T, A>(&mut self, pkt: &T, addr: A) -> Result<(), TransitError> where T: Serialize, A: ToSocketAddrs {
+        let n = {
+            let bytes = &mut self.buffer[..];
+            let mut buf = ByteCounter::new(bytes);
+            try!(serialize(&mut buf, pkt));
+            buf.write_count()
+        };
+        try!(self.socket.send_to(&self.buffer[..n], addr));
         Ok(())
     }
 
@@ -143,6 +147,36 @@ fn deserialize<R, T>(buf: R) -> Result<T, TransitError> where R: Read, T: Deseri
     Ok(data)
 }
 
+struct ByteCounter<W> {
+    counter: usize,
+    writer: W,
+}
+
+impl<W> ByteCounter<W> {
+    fn new(writer: W) -> ByteCounter<W> {
+        ByteCounter {
+            counter: 0,
+            writer: writer,
+        }
+    }
+
+    fn write_count(&self) -> usize {
+        self.counter
+    }
+}
+
+impl<W: Write> Write for ByteCounter<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let n = try!(self.writer.write(buf));
+        self.counter += n;
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.writer.flush()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use udp::*;
@@ -162,7 +196,7 @@ mod test {
         let addr1 = "127.0.0.1:61001";
         let addr2 = "127.0.0.1:61002";
         let mut transit1 = Transit::new(addr1).unwrap();
-        let transit2 = Transit::new(addr2).unwrap();
+        let mut transit2 = Transit::new(addr2).unwrap();
         let test = Test { ten: 10 };
 
         let res = transit2.send_to(&test, addr1);
@@ -178,7 +212,7 @@ mod test {
         let addr1 = "127.0.0.1:63001";
         let addr2 = "127.0.0.1:63002";
         let mut transit1 = Transit::new(addr1).unwrap();
-        let transit2 = Transit::new(addr2).unwrap();
+        let mut transit2 = Transit::new(addr2).unwrap();
         let test = String::from("hello");
 
         let res = transit2.send_to(&test, addr1);
@@ -194,8 +228,8 @@ mod test {
         let addr1 = "127.0.0.1:64001";
         let addr2 = "127.0.0.1:64002";
         let mut transit1 = Transit::new(addr1).unwrap();
-        let transit2 = Transit::new(addr2).unwrap();
-        let vec: Vec<u8> = vec!(9u8);
+        let mut transit2 = Transit::new(addr2).unwrap();
+        let vec = vec!(9u8);
         let slice = &vec[..];
 
         let res = transit2.send_to(&slice, addr1);
@@ -217,7 +251,7 @@ mod test {
     fn test_packet_type() {
         let addr1 = "127.0.0.1:62001";
         let addr2 = "127.0.0.1:62002";
-        let transit1 = Transit::new(addr1).unwrap();
+        let mut transit1 = Transit::new(addr1).unwrap();
         let mut transit2 = Transit::new(addr2).unwrap();
         let test = Another { data: String::from("Hello") };
 
