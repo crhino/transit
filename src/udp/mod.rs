@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 use std::io::{self, Write, Read};
 use std::error::Error;
 use std::net::{UdpSocket, SocketAddr, ToSocketAddrs};
@@ -10,9 +9,8 @@ use msgpack::decode::Error as DeserializeError;
 use msgpack::encode::Error as SerializeError;
 
 const MAX_UDP_SIZE: u16 = 65535;
-pub struct Transit<T> {
+pub struct Transit {
     socket: UdpSocket,
-    packet_type: PhantomData<T>,
     buffer: Box<[u8]>,
 }
 
@@ -96,12 +94,11 @@ impl fmt::Display for TransitError {
 /// let (data, _addr) = res.unwrap();
 /// assert_eq!(data, "hello, rust");
 /// ```
-impl<T> Transit<T> {
-    pub fn new<A>(addr: A) -> Result<Transit<T>, TransitError> where A: ToSocketAddrs {
+impl Transit {
+    pub fn new<A>(addr: A) -> Result<Transit, TransitError> where A: ToSocketAddrs {
         let socket = try!(UdpSocket::bind(addr));
         Ok(Transit {
             socket: socket,
-            packet_type: PhantomData,
             buffer: udp_buffer(),
         })
     }
@@ -109,14 +106,14 @@ impl<T> Transit<T> {
     /// On success, this function returns the type deserialized using the Deserialize trait
     /// implementation. It is not defined what happens when Transit trys to deserialize a different
     /// type into another currently.
-    pub fn recv_from(&mut self) -> Result<(T, SocketAddr), TransitError> where T: Deserialize {
+    pub fn recv_from<T>(&mut self) -> Result<(T, SocketAddr), TransitError> where T: Deserialize {
         let (n, addr) = try!(self.socket.recv_from(&mut self.buffer));
         let data = try!(deserialize(&self.buffer[..n]));
         Ok((data, addr))
     }
 
     /// Transforms the packet into a byte array and sends it to the associated address.
-    pub fn send_to<A>(&self, pkt: &T, addr: A) -> Result<(), TransitError> where T: Serialize, A: ToSocketAddrs {
+    pub fn send_to<T, A>(&self, pkt: &T, addr: A) -> Result<(), TransitError> where T: Serialize, A: ToSocketAddrs {
         let mut vec = Vec::new();
         try!(serialize(&mut vec, pkt));
         try!(self.socket.send_to(&vec[..], addr));
@@ -164,7 +161,7 @@ mod test {
     fn test_send_recv() {
         let addr1 = "127.0.0.1:61001";
         let addr2 = "127.0.0.1:61002";
-        let mut transit1: Transit<Test> = Transit::new(addr1).unwrap();
+        let mut transit1 = Transit::new(addr1).unwrap();
         let transit2 = Transit::new(addr2).unwrap();
         let test = Test { ten: 10 };
 
@@ -172,7 +169,7 @@ mod test {
         assert!(res.is_ok());
         let res = transit1.recv_from();
         assert!(res.is_ok());
-        let (data, _addr) = res.unwrap();
+        let (data, _addr): (Test, _) = res.unwrap();
         assert_eq!(data, test);
     }
 
@@ -180,7 +177,7 @@ mod test {
     fn test_send_recv_string() {
         let addr1 = "127.0.0.1:63001";
         let addr2 = "127.0.0.1:63002";
-        let mut transit1: Transit<String> = Transit::new(addr1).unwrap();
+        let mut transit1 = Transit::new(addr1).unwrap();
         let transit2 = Transit::new(addr2).unwrap();
         let test = String::from("hello");
 
@@ -188,7 +185,7 @@ mod test {
         assert!(res.is_ok());
         let res = transit1.recv_from();
         assert!(res.is_ok());
-        let (data, _addr) = res.unwrap();
+        let (data, _addr): (String, _) = res.unwrap();
         assert_eq!(data, test);
     }
 
@@ -198,7 +195,7 @@ mod test {
         let addr2 = "127.0.0.1:64002";
         let mut transit1 = Transit::new(addr1).unwrap();
         let transit2 = Transit::new(addr2).unwrap();
-        let vec = vec!(9u8);
+        let vec: Vec<u8> = vec!(9u8);
         let slice = &vec[..];
 
         let res = transit2.send_to(&slice, addr1);
@@ -216,18 +213,17 @@ mod test {
         assert_eq!(data, vec);
     }
 
-    // TODO: How to ensure different types are not deserialized as each other with bincode?
-    // #[test]
-    // fn test_packet_type() {
-    //     let addr1 = "127.0.0.1:62001";
-    //     let addr2 = "127.0.0.1:62002";
-    //     let transit1: Transit<Another> = Transit::new(addr1).unwrap();
-    //     let transit2: Transit<Test> = Transit::new(addr2).unwrap();
-    //     let test = Another { data: String::from("Hello") };
+    #[test]
+    fn test_packet_type() {
+        let addr1 = "127.0.0.1:62001";
+        let addr2 = "127.0.0.1:62002";
+        let transit1 = Transit::new(addr1).unwrap();
+        let mut transit2 = Transit::new(addr2).unwrap();
+        let test = Another { data: String::from("Hello") };
 
-    //     let res = transit1.send_to(&test, addr2);
-    //     assert!(res.is_ok());
-    //     let res = transit2.recv_from();
-    //     assert!(res.is_err());
-    // }
+        let res = transit1.send_to(&test, addr2);
+        assert!(res.is_ok());
+        let res: Result<(Test, _), TransitError> = transit2.recv_from();
+        assert!(res.is_err());
+    }
 }
