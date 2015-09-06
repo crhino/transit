@@ -1,6 +1,6 @@
 [package]
 name = "transit"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["crhino <piraino.chris@gmail.com>"]
 
 description = "Send and receive types over UDP packets."
