@@ -10,8 +10,15 @@ keywords = ["udp", "network"]
 license = "BSD-3-Clause"
 
 [dependencies]
-rmp = "*"
-rmp-serde = "*"
 serde = "*"
 
+rmp = { version = "*", optional = true }
+rmp-serde = { version = "*", optional = true }
+serde_json = { version = "*", optional = true }
+
+[dev-dependencies]
 serde_macros = "*"
+
+[features]
+default = ["rmp", "rmp-serde"]
+json = ["serde_json"]

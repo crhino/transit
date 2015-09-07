@@ -260,4 +260,25 @@ mod test {
         let res: Result<(Test, _), TransitError> = transit2.recv_from();
         assert!(res.is_err());
     }
+
+    // FIXME: rmp-serde does not current support enums, see issue #42
+    // #[test]
+    // fn test_enum() {
+    //     #[derive(Serialize, Deserialize, Clone, PartialEq, PartialOrd, Eq, Ord, Debug)]
+    //     enum Custom {
+    //         First,
+    //         Second(String),
+    //     }
+    //     let addr1 = "127.0.0.1:50001";
+    //     let addr2 = "127.0.0.1:50002";
+    //     let mut transit1 = Transit::new(addr1).unwrap();
+    //     let mut transit2 = Transit::new(addr2).unwrap();
+    //     let test = Custom::Second(String::from("Hello"));
+
+    //     let res = transit1.send_to(&test, addr2);
+    //     assert!(res.is_ok());
+    //     let res: Result<(Custom, _), TransitError> = transit2.recv_from();
+    //     let (data, _addr) = res.unwrap();
+    //     assert_eq!(data, test);
+    // }
 }
