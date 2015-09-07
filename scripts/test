@@ -1,0 +1,9 @@
+#!/bin/bash
+
+echo "Testing JSON serialization"
+cargo test --verbose --features "json_serialization"
+cargo bench --verbose --features "json_serialization"
+
+echo "Testing MsgPack serialization"
+cargo test --verbose --features "msgpack_serialization"
+cargo bench --verbose --features "msgpack_serialization"
