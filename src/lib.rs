@@ -9,6 +9,9 @@
 #![cfg_attr(test, feature(custom_derive, plugin))]
 #![cfg_attr(test, plugin(serde_macros))]
 
+#![feature(test)]
+extern crate test;
+
 extern crate serde;
 
 #[cfg(feature = "msgpack_serialization")]

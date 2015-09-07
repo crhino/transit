@@ -224,6 +224,10 @@ impl<W: Write> Write for ByteCounter<W> {
 
 #[cfg(test)]
 mod test {
+    use test::Bencher;
+    use std::thread::{spawn};
+    use std::sync::{Arc};
+    use std::sync::atomic::{Ordering, AtomicBool};
     use udp::*;
 
     #[derive(Serialize, Deserialize, Clone, PartialEq, PartialOrd, Eq, Ord, Debug)]
@@ -326,5 +330,40 @@ mod test {
         let res: Result<(Custom, _), TransitError> = transit2.recv_from();
         let (data, _addr) = res.unwrap();
         assert_eq!(data, test);
+    }
+
+    #[bench]
+    fn bench_send_to(b: &mut Bencher) {
+        #[derive(Serialize, Deserialize, Clone, PartialEq, PartialOrd, Eq, Ord, Debug)]
+        struct Custom {
+            integer: isize,
+            string: String,
+        }
+        let addr1 = "127.0.0.1:50003";
+        let addr2 = "127.0.0.1:50004";
+        let mut transit1 = Transit::new(addr1).unwrap();
+
+        let stop = Arc::new(AtomicBool::new(false));
+        let test = Custom { integer: 123456, string: String::from("Hello world.") };
+
+        let addr2_c = addr2.clone();
+        let stop_c = stop.clone();
+        let thread = spawn(move || {
+            let mut transit2 = Transit::new(addr2_c).unwrap();
+            loop {
+                if stop_c.load(Ordering::SeqCst) {
+                    break
+                }
+                let res: Result<(Custom, _), TransitError> = transit2.recv_from();
+                assert!(res.is_ok());
+            }
+        });
+
+        b.iter(|| {
+            let _r = transit1.send_to(&test, addr2);
+        });
+
+        stop.store(true, Ordering::SeqCst);
+        thread.join().unwrap();
     }
 }
