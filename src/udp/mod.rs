@@ -4,9 +4,16 @@ use std::net::{UdpSocket, SocketAddr, ToSocketAddrs};
 use std::fmt;
 
 use serde::{Serialize, Deserialize};
+
+#[cfg(feature = "msgpack_serialization")]
 use msgpack::{Serializer, Deserializer};
+#[cfg(feature = "msgpack_serialization")]
 use msgpack::decode::Error as DeserializeError;
+#[cfg(feature = "msgpack_serialization")]
 use msgpack::encode::Error as SerializeError;
+
+#[cfg(feature = "json_serialization")]
+use serde_json;
 
 const MAX_UDP_SIZE: u16 = 65535;
 pub struct Transit {
@@ -20,6 +27,7 @@ pub enum TransitError {
     IoError(io::Error),
     SerializeError(UnderlyingError),
     DeserializeError(UnderlyingError),
+    Error(UnderlyingError),
 }
 
 impl Error for TransitError {
@@ -28,6 +36,7 @@ impl Error for TransitError {
             TransitError::IoError(ref err) => err.description(),
             TransitError::SerializeError(ref err) => err.description(),
             TransitError::DeserializeError(ref err) => err.description(),
+            TransitError::Error(ref err) => err.description(),
         }
     }
 
@@ -36,6 +45,7 @@ impl Error for TransitError {
             TransitError::IoError(ref err) => err.cause(),
             TransitError::SerializeError(ref err) => err.cause(),
             TransitError::DeserializeError(ref err) => err.cause(),
+            TransitError::Error(ref err) => err.cause(),
         }
     }
 }
@@ -46,15 +56,24 @@ impl From<io::Error> for TransitError {
     }
 }
 
+#[cfg(feature = "msgpack_serialization")]
 impl From<DeserializeError> for TransitError {
     fn from(err: DeserializeError) -> TransitError {
         TransitError::DeserializeError(Box::new(err))
     }
 }
 
+#[cfg(feature = "msgpack_serialization")]
 impl From<SerializeError> for TransitError {
     fn from(err: SerializeError) -> TransitError {
         TransitError::SerializeError(Box::new(err))
+    }
+}
+
+#[cfg(feature = "json_serialization")]
+impl From<serde_json::Error> for TransitError {
+    fn from(err: serde_json::Error) -> TransitError {
+        TransitError::Error(Box::new(err))
     }
 }
 
@@ -67,6 +86,8 @@ impl fmt::Display for TransitError {
                 write!(fmt, "DeserializeError: {}", err),
             TransitError::SerializeError(ref err) =>
                 write!(fmt, "SerializeError: {}", err),
+            TransitError::Error(ref err) =>
+                write!(fmt, "Error: {}", err),
         }
     }
 }
@@ -137,14 +158,38 @@ fn udp_buffer() -> Box<[u8]> {
         .into_boxed_slice()
 }
 
+#[cfg(feature = "msgpack_serialization")]
 fn serialize<W, T>(mut buf: W, val: &T) -> Result<(), TransitError> where W: Write, T: Serialize {
     try!(val.serialize(&mut Serializer::new(&mut buf)));
     Ok(())
 }
 
+#[cfg(feature = "json_serialization")]
+fn serialize<W, T>(mut buf: W, val: &T) -> Result<(), TransitError> where W: Write, T: Serialize {
+    try!(serde_json::to_writer(&mut buf, &val));
+    Ok(())
+}
+
+#[cfg(not(any(feature = "json_serialization", feature = "msgpack_serialization")))]
+fn serialize<W, T>(mut _buf: W, _val: &T) -> Result<(), TransitError> where W: Write, T: Serialize {
+    panic!("Need either json or msgpack feature")
+}
+
+#[cfg(feature = "msgpack_serialization")]
 fn deserialize<R, T>(buf: R) -> Result<T, TransitError> where R: Read, T: Deserialize {
     let data = try!(Deserialize::deserialize(&mut Deserializer::new(buf)));
     Ok(data)
+}
+
+#[cfg(feature = "json_serialization")]
+fn deserialize<R, T>(buf: R) -> Result<T, TransitError> where R: Read, T: Deserialize {
+    let data = try!(serde_json::de::from_reader(buf));
+    Ok(data)
+}
+
+#[cfg(not(any(feature = "json_serialization", feature = "msgpack_serialization")))]
+fn deserialize<R, T>(_buf: R) -> Result<T, TransitError> where R: Read, T: Deserialize {
+    panic!("Need either json or msgpack feature")
 }
 
 struct ByteCounter<W> {
@@ -262,23 +307,24 @@ mod test {
     }
 
     // FIXME: rmp-serde does not current support enums, see issue #42
-    // #[test]
-    // fn test_enum() {
-    //     #[derive(Serialize, Deserialize, Clone, PartialEq, PartialOrd, Eq, Ord, Debug)]
-    //     enum Custom {
-    //         First,
-    //         Second(String),
-    //     }
-    //     let addr1 = "127.0.0.1:50001";
-    //     let addr2 = "127.0.0.1:50002";
-    //     let mut transit1 = Transit::new(addr1).unwrap();
-    //     let mut transit2 = Transit::new(addr2).unwrap();
-    //     let test = Custom::Second(String::from("Hello"));
+    #[cfg(feature = "json_serialization")]
+    #[test]
+    fn test_enum() {
+        #[derive(Serialize, Deserialize, Clone, PartialEq, PartialOrd, Eq, Ord, Debug)]
+        enum Custom {
+            First,
+            Second(String),
+        }
+        let addr1 = "127.0.0.1:50001";
+        let addr2 = "127.0.0.1:50002";
+        let mut transit1 = Transit::new(addr1).unwrap();
+        let mut transit2 = Transit::new(addr2).unwrap();
+        let test = Custom::Second(String::from("Hello"));
 
-    //     let res = transit1.send_to(&test, addr2);
-    //     assert!(res.is_ok());
-    //     let res: Result<(Custom, _), TransitError> = transit2.recv_from();
-    //     let (data, _addr) = res.unwrap();
-    //     assert_eq!(data, test);
-    // }
+        let res = transit1.send_to(&test, addr2);
+        assert!(res.is_ok());
+        let res: Result<(Custom, _), TransitError> = transit2.recv_from();
+        let (data, _addr) = res.unwrap();
+        assert_eq!(data, test);
+    }
 }

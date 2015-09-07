@@ -20,5 +20,6 @@ serde_json = { version = "*", optional = true }
 serde_macros = "*"
 
 [features]
-default = ["rmp", "rmp-serde"]
-json = ["serde_json"]
+default = []
+msgpack_serialization = ["rmp", "rmp-serde"]
+json_serialization = ["serde_json"]

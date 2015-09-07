@@ -5,7 +5,11 @@
 #![cfg_attr(test, feature(custom_derive, plugin))]
 #![cfg_attr(test, plugin(serde_macros))]
 
-extern crate rmp_serde as msgpack;
 extern crate serde;
+
+#[cfg(feature = "msgpack_serialization")]
+extern crate rmp_serde as msgpack;
+#[cfg(feature = "json_serialization")]
+extern crate serde_json;
 
 pub mod udp;
