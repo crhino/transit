@@ -225,9 +225,6 @@ impl<W: Write> Write for ByteCounter<W> {
 #[cfg(test)]
 mod test {
     use test::Bencher;
-    use std::thread::{spawn};
-    use std::sync::{Arc};
-    use std::sync::atomic::{Ordering, AtomicBool};
     use udp::*;
 
     #[derive(Serialize, Deserialize, Clone, PartialEq, PartialOrd, Eq, Ord, Debug)]
@@ -242,13 +239,13 @@ mod test {
 
     #[test]
     fn test_send_recv() {
-        let addr1 = "127.0.0.1:61001";
-        let addr2 = "127.0.0.1:61002";
+        let addr1 = "127.0.0.1:0";
+        let addr2 = "127.0.0.1:0";
         let mut transit1 = Transit::new(addr1).unwrap();
         let mut transit2 = Transit::new(addr2).unwrap();
         let test = Test { ten: 10 };
 
-        let res = transit2.send_to(&test, addr1);
+        let res = transit2.send_to(&test, transit1.local_addr().unwrap());
         assert!(res.is_ok());
         let res = transit1.recv_from();
         assert!(res.is_ok());
@@ -258,13 +255,11 @@ mod test {
 
     #[test]
     fn test_send_recv_string() {
-        let addr1 = "127.0.0.1:63001";
-        let addr2 = "127.0.0.1:63002";
-        let mut transit1 = Transit::new(addr1).unwrap();
-        let mut transit2 = Transit::new(addr2).unwrap();
+        let mut transit1 = Transit::new("127.0.0.1:0").unwrap();
+        let mut transit2 = Transit::new("127.0.0.1:0").unwrap();
         let test = String::from("hello");
 
-        let res = transit2.send_to(&test, addr1);
+        let res = transit2.send_to(&test, transit1.local_addr().unwrap());
         assert!(res.is_ok());
         let res = transit1.recv_from();
         assert!(res.is_ok());
@@ -274,12 +269,11 @@ mod test {
 
     #[test]
     fn test_send_recv_bytes() {
-        let addr1 = "127.0.0.1:64001";
-        let addr2 = "127.0.0.1:64002";
-        let mut transit1 = Transit::new(addr1).unwrap();
-        let mut transit2 = Transit::new(addr2).unwrap();
+        let mut transit1 = Transit::new("127.0.0.1:0").unwrap();
+        let mut transit2 = Transit::new("127.0.0.1:0").unwrap();
         let vec = vec!(9u8);
         let slice = &vec[..];
+        let addr1 = transit1.local_addr().unwrap();
 
         let res = transit2.send_to(&slice, addr1);
         assert!(res.is_ok());
@@ -298,13 +292,13 @@ mod test {
 
     #[test]
     fn test_packet_type() {
-        let addr1 = "127.0.0.1:62001";
-        let addr2 = "127.0.0.1:62002";
+        let addr1 = "127.0.0.1:0";
+        let addr2 = "127.0.0.1:0";
         let mut transit1 = Transit::new(addr1).unwrap();
         let mut transit2 = Transit::new(addr2).unwrap();
         let test = Another { data: String::from("Hello") };
 
-        let res = transit1.send_to(&test, addr2);
+        let res = transit1.send_to(&test, transit2.local_addr().unwrap());
         assert!(res.is_ok());
         let res: Result<(Test, _), TransitError> = transit2.recv_from();
         assert!(res.is_err());
@@ -319,13 +313,13 @@ mod test {
             First,
             Second(String),
         }
-        let addr1 = "127.0.0.1:50001";
-        let addr2 = "127.0.0.1:50002";
+        let addr1 = "127.0.0.1:0";
+        let addr2 = "127.0.0.1:0";
         let mut transit1 = Transit::new(addr1).unwrap();
         let mut transit2 = Transit::new(addr2).unwrap();
         let test = Custom::Second(String::from("Hello"));
 
-        let res = transit1.send_to(&test, addr2);
+        let res = transit1.send_to(&test, transit2.local_addr().unwrap());
         assert!(res.is_ok());
         let res: Result<(Custom, _), TransitError> = transit2.recv_from();
         let (data, _addr) = res.unwrap();
@@ -339,31 +333,12 @@ mod test {
             integer: isize,
             string: String,
         }
-        let addr1 = "127.0.0.1:50003";
-        let addr2 = "127.0.0.1:50004";
-        let mut transit1 = Transit::new(addr1).unwrap();
+        let mut transit1 = Transit::new("127.0.0.1:0").unwrap();
 
-        let stop = Arc::new(AtomicBool::new(false));
         let test = Custom { integer: 123456, string: String::from("Hello world.") };
 
-        let addr2_c = addr2.clone();
-        let stop_c = stop.clone();
-        let thread = spawn(move || {
-            let mut transit2 = Transit::new(addr2_c).unwrap();
-            loop {
-                if stop_c.load(Ordering::SeqCst) {
-                    break
-                }
-                let res: Result<(Custom, _), TransitError> = transit2.recv_from();
-                assert!(res.is_ok());
-            }
-        });
-
         b.iter(|| {
-            let _r = transit1.send_to(&test, addr2);
+            let _r = transit1.send_to(&test, "127.0.0.1:60000");
         });
-
-        stop.store(true, Ordering::SeqCst);
-        thread.join().unwrap();
     }
 }
