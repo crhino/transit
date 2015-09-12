@@ -17,6 +17,10 @@ rmp = { version = "*", optional = true }
 rmp-serde = { version = "*", optional = true } # Requires 0.8.0 or greater
 serde_json = { version = "*", optional = true }
 
+docopt = { version = "*", optional = true }
+docopt_macros = { version = "*", optional = true }
+rustc-serialize = { version = "*", optional = true }
+
 [dev-dependencies]
 serde_macros = "*"
 
@@ -24,3 +28,4 @@ serde_macros = "*"
 default = []
 msgpack_serialization = ["rmp", "rmp-serde"]
 json_serialization = ["serde_json"]
+udp_client = ["docopt", "docopt_macros", "rustc-serialize"]
