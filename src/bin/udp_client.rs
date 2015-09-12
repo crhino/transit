@@ -31,7 +31,7 @@ fn main() {
                     pkt.iter().map(|x| *x).collect::<Vec<u8>>()
                     ).unwrap());
         } else {
-            println!("{}", pkt);
+            println!("{:?}", pkt);
         }
     }
 }
