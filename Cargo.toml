@@ -14,7 +14,7 @@ license = "BSD-3-Clause"
 serde = "*"
 
 rmp = { version = "*", optional = true }
-rmp-serde = { version = "*", optional = true }
+rmp-serde = { version = "*", optional = true } # Requires 0.8.0 or greater
 serde_json = { version = "*", optional = true }
 
 [dev-dependencies]

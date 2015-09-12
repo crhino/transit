@@ -304,8 +304,6 @@ mod test {
         assert!(res.is_err());
     }
 
-    // FIXME: rmp-serde does not current support enums, see issue #42
-    #[cfg(feature = "json_serialization")]
     #[test]
     fn test_enum() {
         #[derive(Serialize, Deserialize, Clone, PartialEq, PartialOrd, Eq, Ord, Debug)]
