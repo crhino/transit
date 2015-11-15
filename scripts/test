@@ -2,11 +2,17 @@
 
 echo "Testing JSON serialization"
 cargo test --verbose --features "json_serialization"
-cargo bench --verbose --features "json_serialization"
 
 echo "Testing MsgPack serialization"
 cargo test --verbose --features "msgpack_serialization"
+
+
+echo "Benchmarking JSON serialization"
+cargo bench --verbose --features "json_serialization"
+
+echo "Benchmarking MsgPack serialization"
 cargo bench --verbose --features "msgpack_serialization"
+
 
 echo "Building UDP client"
 cargo build --features "udp_client"

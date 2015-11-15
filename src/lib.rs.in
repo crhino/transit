@@ -10,4 +10,4 @@ extern crate rmp_serde as msgpack;
 #[cfg(feature = "json_serialization")]
 extern crate serde_json;
 
-include!(concat!(env!("OUT_DIR"), "/lib.rs"));
+pub mod udp;
