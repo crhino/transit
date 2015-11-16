@@ -1,6 +1,5 @@
 #![cfg(feature = "udp_client")]
 #![feature(plugin)]
-#![feature(result_expect)]
 #![feature(convert)]
 #![plugin(docopt_macros)]
 
